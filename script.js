@@ -1,27 +1,3 @@
-// Configuración de Firebase SkillMatch-Database
-const firebaseConfig = {
-  apiKey: "AIzaSyB3A5F6iiAfOBou7q1Q-A7Ovo_F1hE52Bg",
-  authDomain: "skillmatch-database.firebaseapp.com",
-  projectId: "skillmatch-database",
-  storageBucket: "skillmatch-database.firebasestorage.app",
-  messagingSenderId: "308394309112",
-  appId: "1:308394309112:web:ef0e43c30ed3a665c4520d"
-};
-
-// Inicializar Firebase y Firestore
-firebase.initializeApp(firebaseConfig);
-const db = firebase.firestore();
-
-// Usuarios por defecto (Administrador y Profesores)
-const defaultUsers = [
-  { name: 'Administrador SkillMatch', email: 'admin@skillmatch.com', password: 'admin', role: 'admin' },  
-  { name: 'Prof. Carlos Mendoza', email: 'carlos@test.com', password: '123', role: 'teacher', subject: 'Matemáticas y Cálculo', examScore: 90 },
-  { name: 'Dra. María Gómez', email: 'maria@test.com', password: '123', role: 'teacher', subject: 'Física y Química', examScore: 85 },
-  { name: 'Ing. Alejandro Silva', email: 'alejo@test.com', password: '123', role: 'teacher', subject: 'Programación y Desarrollo', examScore: 95 }
-];
-
-let users = [];
-let bookings = JSON.parse(localStorage.getItem('sm_bookings')) || [];
 let currentUser = null;
 let tempRegisterData = null;
 
@@ -39,7 +15,27 @@ async function loadUsersFromCloud() {
     } else {
       // Si ya hay registros en la nube, descarga la lista completa
       users = snapshot.docs.map(doc => doc.data());
-    }
+    }// 1. Los profesores y administrador por defecto
+const defaultUsers = [
+  { name: 'Administrador SkillMatch', email: 'admin@skillmatch.com', password: 'admin', role: 'admin' },  
+  { name: 'Prof. Carlos Mendoza', email: 'carlos@test.com', password: '123', role: 'teacher', subject: 'Matemáticas y Cálculo', examScore: 90 },
+  { name: 'Dra. María Gómez', email: 'maria@test.com', password: '123', role: 'teacher', subject: 'Física y Química', examScore: 85 },
+  { name: 'Ing. Alejandro Silva', email: 'alejo@test.com', password: '123', role: 'teacher', subject: 'Programación y Desarrollo', examScore: 95 }
+];
+
+// 2. Carga los usuarios guardados localmente, si no existen usa los por defecto
+let users = JSON.parse(localStorage.getItem('sm_users')) || [...defaultUsers];
+
+// 3. Guardar la lista inicial en el LocalStorage si es la primera vez
+if (!localStorage.getItem('sm_users')) {
+  localStorage.setItem('sm_users', JSON.stringify(users));
+}
+
+// 4. Listas y variables globales del sistema
+let bookings = JSON.parse(localStorage.getItem('sm_bookings')) || [];
+let currentUser = null;
+let tempRegisterData = null;
+
   } catch (error) {
     console.error("Error al cargar datos desde Firebase:", error);
     users = [...defaultUsers];
