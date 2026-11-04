@@ -1,14 +1,53 @@
-/* BASE DE DATOS EN MEMORIA LOCAL */
-let users = JSON.parse(localStorage.getItem('sm_users')) || [
+// Configuración de Firebase SkillMatch-Database
+const firebaseConfig = {
+  apiKey: "AIzaSyB3A5F6iiAfOBou7q1Q-A7Ovo_F1hE52Bg",
+  authDomain: "skillmatch-database.firebaseapp.com",
+  projectId: "skillmatch-database",
+  storageBucket: "skillmatch-database.firebasestorage.app",
+  messagingSenderId: "308394309112",
+  appId: "1:308394309112:web:ef0e43c30ed3a665c4520d"
+};
+
+// Inicializar Firebase y Firestore
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+// Usuarios por defecto (Administrador y Profesores)
+const defaultUsers = [
   { name: 'Administrador SkillMatch', email: 'admin@skillmatch.com', password: 'admin', role: 'admin' },  
   { name: 'Prof. Carlos Mendoza', email: 'carlos@test.com', password: '123', role: 'teacher', subject: 'Matemáticas y Cálculo', examScore: 90 },
   { name: 'Dra. María Gómez', email: 'maria@test.com', password: '123', role: 'teacher', subject: 'Física y Química', examScore: 85 },
   { name: 'Ing. Alejandro Silva', email: 'alejo@test.com', password: '123', role: 'teacher', subject: 'Programación y Desarrollo', examScore: 95 }
 ];
-let bookings = JSON.parse(localStorage.getItem('sm_bookings')) || [];
 
+let users = [];
+let bookings = JSON.parse(localStorage.getItem('sm_bookings')) || [];
 let currentUser = null;
 let tempRegisterData = null;
+
+// Cargar usuarios desde la nube conservando los profesores
+async function loadUsersFromCloud() {
+  try {
+    const snapshot = await db.collection("users").get();
+    
+    if (snapshot.empty) {
+      // Si la base de datos está totalmente vacía en Firebase, sube los profesores y el admin por primera vez
+      for (const u of defaultUsers) {
+        await db.collection("users").add(u);
+      }
+      users = [...defaultUsers];
+    } else {
+      // Si ya hay registros en la nube, descarga la lista completa
+      users = snapshot.docs.map(doc => doc.data());
+    }
+  } catch (error) {
+    console.error("Error al cargar datos desde Firebase:", error);
+    users = [...defaultUsers];
+  }
+}
+
+// Ejecutar la carga al iniciar
+loadUsersFromCloud();
 
 // Estado del Examen
 let currentExamSubject = '';
@@ -144,37 +183,6 @@ function handleRegister(e) {
     return;
   }
 
- tempRegisterData = { name, email, password, role, subject, examScore: 0 };
-
-closeModal('registerModal');
-
-if (tempRegisterData.role === 'teacher') {
-    startExam(tempRegisterData.subject);
-} else {
-    users.push(tempRegisterData);
-    localStorage.setItem('sm_users', JSON.stringify(users));
-    alert('Registrado exitosamente.');
-    openModal('loginModal');
-}
-
-    openModal('loginModal');
-  }
-
-/* REGISTRO Y VERIFICACIÓN DE CORREO */
-function handleRegister(e) {
-  e.preventDefault();
-  const name = document.getElementById('regName').value;
-  const email = document.getElementById('regEmail').value;
-  const password = document.getElementById('regPassword').value;
-  const role = document.getElementById('regRole').value;
-  const subject = document.getElementById('regSubject').value;
-  const isHuman = document.getElementById('humanCaptcha').checked;
-
-  if (!isHuman) {
-    alert('Por favor marca la casilla "Soy humano" para continuar.');
-    return;
-  }
-
   tempRegisterData = { name, email, password, role, subject, examScore: 0 };
 
   closeModal('registerModal');
@@ -182,10 +190,14 @@ function handleRegister(e) {
   if (tempRegisterData.role === 'teacher') {
     startExam(tempRegisterData.subject);
   } else {
-    users.push(tempRegisterData);
-    localStorage.setItem('sm_users', JSON.stringify(users));
-    alert('Registrado exitosamente. Ahora puedes iniciar sesión.');
-    openModal('loginModal');
+    // Guardar en la nube de Firebase
+    db.collection("users").add(tempRegisterData).then(() => {
+      users.push(tempRegisterData);
+      alert('Registrado exitosamente en la nube.');
+      openModal('loginModal');
+    }).catch(err => {
+      alert('Error al guardar en la nube: ' + err.message);
+    });
   }
 }
 
@@ -346,8 +358,9 @@ function finishExam() {
     text.textContent = `Aprobaste con ${correctCount} de 20 respuestas correctas (${percentage}%). Tu registro como tutor ha sido aprobado.`;
     
     tempRegisterData.examScore = percentage;
-    users.push(tempRegisterData);
-    localStorage.setItem('sm_users', JSON.stringify(users));
+    db.collection("users").add(tempRegisterData).then(() => {
+      users.push(tempRegisterData);
+    });
   } else {
     iconBox.innerHTML = '<i class="fa-solid fa-circle-xmark" style="color: #ef4444; font-size: 4rem;"></i>';
     title.textContent = 'Examen No Aprobado';
@@ -522,10 +535,19 @@ function sendTeacherMessage() {
 }
 
 /* FUNCIONES DEL PANEL ADMINISTRADOR */
-function renderAdminUsersList() {
+async function renderAdminUsersList() {
   const tbody = document.getElementById('adminUsersTableBody');
   const countSpan = document.getElementById('totalUsersCount');
   
+  try {
+    const snapshot = await db.collection("users").get();
+    if (!snapshot.empty) {
+      users = snapshot.docs.map(doc => doc.data());
+    }
+  } catch (error) {
+    console.error("Error al obtener usuarios:", error);
+  }
+
   tbody.innerHTML = '';
   countSpan.textContent = users.length;
 
@@ -567,7 +589,6 @@ function renderAdminUsersList() {
 function deleteUser(email) {
   if (confirm(`¿Estás seguro de que deseas eliminar al usuario ${email}?`)) {
     users = users.filter(u => u.email !== email);
-    localStorage.setItem('sm_users', JSON.stringify(users));
     renderAdminUsersList();
   }
 }
