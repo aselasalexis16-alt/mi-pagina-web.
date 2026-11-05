@@ -1,21 +1,4 @@
-let currentUser = null;
-let tempRegisterData = null;
-
-// Cargar usuarios desde la nube conservando los profesores
-async function loadUsersFromCloud() {
-  try {
-    const snapshot = await db.collection("users").get();
-    
-    if (snapshot.empty) {
-      // Si la base de datos está totalmente vacía en Firebase, sube los profesores y el admin por primera vez
-      for (const u of defaultUsers) {
-        await db.collection("users").add(u);
-      }
-      users = [...defaultUsers];
-    } else {
-      // Si ya hay registros en la nube, descarga la lista completa
-      users = snapshot.docs.map(doc => doc.data());
-    }// 1. Los profesores y administrador por defecto
+// 1. Los profesores y administrador por defecto
 const defaultUsers = [
   { name: 'Administrador SkillMatch', email: 'admin@skillmatch.com', password: 'admin', role: 'admin' },  
   { name: 'Prof. Carlos Mendoza', email: 'carlos@test.com', password: '123', role: 'teacher', subject: 'Matemáticas y Cálculo', examScore: 90 },
@@ -35,15 +18,6 @@ if (!localStorage.getItem('sm_users')) {
 let bookings = JSON.parse(localStorage.getItem('sm_bookings')) || [];
 let currentUser = null;
 let tempRegisterData = null;
-
-  } catch (error) {
-    console.error("Error al cargar datos desde Firebase:", error);
-    users = [...defaultUsers];
-  }
-}
-
-// Ejecutar la carga al iniciar
-loadUsersFromCloud();
 
 // Estado del Examen
 let currentExamSubject = '';
@@ -186,14 +160,11 @@ function handleRegister(e) {
   if (tempRegisterData.role === 'teacher') {
     startExam(tempRegisterData.subject);
   } else {
-    // Guardar en la nube de Firebase
-    db.collection("users").add(tempRegisterData).then(() => {
-      users.push(tempRegisterData);
-      alert('Registrado exitosamente en la nube.');
-      openModal('loginModal');
-    }).catch(err => {
-      alert('Error al guardar en la nube: ' + err.message);
-    });
+    // Guardar en el LocalStorage
+    users.push(tempRegisterData);
+    localStorage.setItem('sm_users', JSON.stringify(users));
+    alert('Registrado exitosamente.');
+    openModal('loginModal');
   }
 }
 
@@ -202,6 +173,9 @@ function handleLogin(e) {
   e.preventDefault();
   const email = document.getElementById('loginEmail').value;
   const password = document.getElementById('loginPassword').value;
+
+  // Actualizar usuarios desde localStorage por si hubo cambios recientes
+  users = JSON.parse(localStorage.getItem('sm_users')) || [...defaultUsers];
 
   const found = users.find(u => u.email === email && u.password === password);
 
@@ -354,9 +328,8 @@ function finishExam() {
     text.textContent = `Aprobaste con ${correctCount} de 20 respuestas correctas (${percentage}%). Tu registro como tutor ha sido aprobado.`;
     
     tempRegisterData.examScore = percentage;
-    db.collection("users").add(tempRegisterData).then(() => {
-      users.push(tempRegisterData);
-    });
+    users.push(tempRegisterData);
+    localStorage.setItem('sm_users', JSON.stringify(users));
   } else {
     iconBox.innerHTML = '<i class="fa-solid fa-circle-xmark" style="color: #ef4444; font-size: 4rem;"></i>';
     title.textContent = 'Examen No Aprobado';
@@ -379,6 +352,8 @@ function renderTutors() {
 
   grid.innerHTML = '';
 
+  // Asegurar lista actualizada
+  users = JSON.parse(localStorage.getItem('sm_users')) || [...defaultUsers];
   const teachers = users.filter(u => u.role === 'teacher');
 
   const filtered = teachers.filter(t => {
@@ -430,6 +405,7 @@ function filterTutors() {
 let selectedTeacherForBooking = null;
 
 function openBookingModal(teacherEmail) {
+  users = JSON.parse(localStorage.getItem('sm_users')) || [...defaultUsers];
   selectedTeacherForBooking = users.find(u => u.email === teacherEmail);
   document.getElementById('bookingTutorName').textContent = selectedTeacherForBooking.name;
   document.getElementById('bookingSubject').textContent = selectedTeacherForBooking.subject;
@@ -467,6 +443,7 @@ function renderTeacherPanel() {
   const container = document.getElementById('classRequestsList');
   container.innerHTML = '';
 
+  bookings = JSON.parse(localStorage.getItem('sm_bookings')) || [];
   const myRequests = bookings.filter(b => b.teacherEmail === currentUser.email);
 
   if (myRequests.length === 0) {
@@ -531,18 +508,12 @@ function sendTeacherMessage() {
 }
 
 /* FUNCIONES DEL PANEL ADMINISTRADOR */
-async function renderAdminUsersList() {
+function renderAdminUsersList() {
   const tbody = document.getElementById('adminUsersTableBody');
   const countSpan = document.getElementById('totalUsersCount');
   
-  try {
-    const snapshot = await db.collection("users").get();
-    if (!snapshot.empty) {
-      users = snapshot.docs.map(doc => doc.data());
-    }
-  } catch (error) {
-    console.error("Error al obtener usuarios:", error);
-  }
+  // Cargar desde localStorage
+  users = JSON.parse(localStorage.getItem('sm_users')) || [...defaultUsers];
 
   tbody.innerHTML = '';
   countSpan.textContent = users.length;
@@ -585,6 +556,7 @@ async function renderAdminUsersList() {
 function deleteUser(email) {
   if (confirm(`¿Estás seguro de que deseas eliminar al usuario ${email}?`)) {
     users = users.filter(u => u.email !== email);
+    localStorage.setItem('sm_users', JSON.stringify(users));
     renderAdminUsersList();
   }
 }
